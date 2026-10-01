@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BÁO CÁO TEAM THU CŨ NAM PHONG</title>
+  <!-- Tailwind CSS cho giao diện -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js cho vẽ biểu đồ -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg gap-4">
+      <div>
+        <h1 class="text-2xl font-extrabold tracking-wide text-blue-400">BÁO CÁO TEAM THU CŨ — NAM PHONG</h1>
+        <p class="text-sm text-slate-400 mt-1">Hệ thống theo dõi nhập, xuất & tồn kho tự động</p>
+      </div>
+      <button onclick="fetchData()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5 py-2.5 rounded-xl transition duration-200 shadow-md active:scale-95 flex items-center gap-2">
+        <span>🔄 Lấy số mới</span>
+      </button>
+    </header>
+
+    <!-- Thẻ KPI -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
+        <p class="text-xs text-slate-400 font-semibold uppercase">Tổng Nhập (Inbound)</p>
+        <h2 id="kpi-inbound" class="text-3xl font-black text-emerald-400 mt-2">0</h2>
+        <p class="text-xs text-slate-500 mt-1">máy nhập kho</p>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
+        <p class="text-xs text-slate-400 font-semibold uppercase">Tổng Xuất (Outbound)</p>
+        <h2 id="kpi-outbound" class="text-3xl font-black text-amber-400 mt-2">0</h2>
+        <p class="text-xs text-slate-500 mt-1">máy đã xuất</p>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
+        <p class="text-xs text-slate-400 font-semibold uppercase">Tồn Kho Thực Tế</p>
+        <h2 id="kpi-stock" class="text-3xl font-black text-blue-400 mt-2">0</h2>
+        <p class="text-xs text-slate-500 mt-1">máy trong kho</p>
+      </div>
+
+      <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
+        <p class="text-xs text-slate-400 font-semibold uppercase">Tổng Số Model</p>
+        <h2 id="kpi-models" class="text-3xl font-black text-purple-400 mt-2">0</h2>
+        <p class="text-xs text-slate-500 mt-1">dòng máy quản lý</p>
+      </div>
+    </div>
+
+    <!-- Biểu đồ -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+        <h3 class="text-md font-bold text-slate-200 mb-4">Top 7 Model Nhập Kho Nhiều Nhất</h3>
+        <div class="h-64">
+          <canvas id="chartTopInbound"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm">
+        <h3 class="text-md font-bold text-slate-200 mb-4">Top 7 Model Xuất Bán Nhiều Nhất</h3>
+        <div class="h-64">
+          <canvas id="chartTopOutbound"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bảng Tồn Kho Theo Model -->
+    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm space-y-4">
+      <div class="flex justify-between items-center">
+        <h3 class="text-md font-bold text-slate-200">Chi Tiết Tồn Kho Theo Model</h3>
+        <span id="loading-status" class="text-xs text-slate-400">Đang tải dữ liệu...</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-300">
+          <thead class="text-xs text-slate-400 uppercase bg-slate-900/50 rounded-lg">
+            <tr>
+              <th class="p-3">Model</th>
+              <th class="p-3 text-center">Tổng Nhập</th>
+              <th class="p-3 text-center">Tổng Xuất</th>
+              <th class="p-3 text-center">Tồn Kho</th>
+            </tr>
+          </thead>
+          <tbody id="table-stock" class="divide-y divide-slate-700/50">
+            <!-- Dữ liệu bảng sẽ tự động đổ vào đây -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbxHk-koGFHyShRegWyEckFBlM8ZfAl0IeKqcgVta5wAltT9rL6e16veNmKkJgbOWmxq/exec";
+
+    let chartInboundInstance = null;
+    let chartOutboundInstance = null;
+
+    async function fetchData() {
+      const statusEl = document.getElementById('loading-status');
+      statusEl.innerText = "⏳ Đang đồng bộ số liệu từ Google Sheet...";
+
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        
+        const inboundList = data.inbound || [];
+        const outboundList = data.outbound || [];
+
+        // 1. Tính toán KPI
+        let totalInbound = 0;
+        let totalOutbound = 0;
+        
+        const inboundByModel = {};
+        const outboundByModel = {};
+
+        inboundList.forEach(item => {
+          const qty = Number(item.Qty) || 0;
+          totalInbound += qty;
+          const model = item.Model || item["Product Name"] || "Khác";
+          inboundByModel[model] = (inboundByModel[model] || 0) + qty;
+        });
+
+        outboundList.forEach(item => {
+          const qty = Number(item.Qty) || 0;
+          totalOutbound += qty;
+          const model = item.Model || item["Product Name"] || "Khác";
+          outboundByModel[model] = (outboundByModel[model] || 0) + qty;
+        });
+
+        const totalStock = totalInbound - totalOutbound;
+        const allModels = new Set([...Object.keys(inboundByModel), ...Object.keys(outboundByModel)]);
+
+        document.getElementById('kpi-inbound').innerText = totalInbound.toLocaleString('vi-VN');
+        document.getElementById('kpi-outbound').innerText = totalOutbound.toLocaleString('vi-VN');
+        document.getElementById('kpi-stock').innerText = totalStock.toLocaleString('vi-VN');
+        document.getElementById('kpi-models').innerText = allModels.size;
+
+        // 2. Vẽ biểu đồ Top Model
+        renderCharts(inboundByModel, outboundByModel);
+
+        // 3. Đổ bảng chi tiết
+        renderStockTable(allModels, inboundByModel, outboundByModel);
+
+        statusEl.innerText = "✅ Đã cập nhật số liệu mới nhất";
+      } catch (err) {
+        console.error("Lỗi:", err);
+        statusEl.innerText = "❌ Lỗi kết nối dữ liệu";
+      }
+    }
+
+    function renderCharts(inboundMap, outboundMap) {
+      // Top Inbound
+      const topInbound = Object.entries(inboundMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 7);
+
+      const topOutbound = Object.entries(outboundMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 7);
+
+      if (chartInboundInstance) chartInboundInstance.destroy();
+      if (chartOutboundInstance) chartOutboundInstance.destroy();
+
+      const ctxIn = document.getElementById('chartTopInbound').getContext('2d');
+      chartInboundInstance = new Chart(ctxIn, {
+        type: 'bar',
+        data: {
+          labels: topInbound.map(x => x[0]),
+          datasets: [{ label: 'Số lượng nhập', data: topInbound.map(x => x[1]), backgroundColor: '#10b981' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      const ctxOut = document.getElementById('chartTopOutbound').getContext('2d');
+      chartOutboundInstance = new Chart(ctxOut, {
+        type: 'bar',
+        data: {
+          labels: topOutbound.map(x => x[0]),
+          datasets: [{ label: 'Số lượng xuất', data: topOutbound.map(x => x[1]), backgroundColor: '#f59e0b' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+    }
+
+    function renderStockTable(modelsSet, inboundMap, outboundMap) {
+      const tbody = document.getElementById('table-stock');
+      tbody.innerHTML = "";
+
+      const rows = Array.from(modelsSet).map(model => {
+        const inQty = inboundMap[model] || 0;
+        const outQty = outboundMap[model] || 0;
+        const stock = inQty - outQty;
+        return { model, inQty, outQty, stock };
+      }).sort((a, b) => b.stock - a.stock);
+
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-700/30 transition";
+        tr.innerHTML = `
+          <td class="p-3 font-medium text-slate-200">${r.model}</td>
+          <td class="p-3 text-center text-emerald-400">${r.inQty.toLocaleString('vi-VN')}</td>
+          <td class="p-3 text-center text-amber-400">${r.outQty.toLocaleString('vi-VN')}</td>
+          <td class="p-3 text-center font-bold ${r.stock < 0 ? 'text-red-400' : 'text-blue-400'}">${r.stock.toLocaleString('vi-VN')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Tải số liệu ngay khi mở trang
+    fetchData();
+  </script>
+</body>
+</html>
